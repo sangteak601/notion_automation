@@ -71,12 +71,16 @@ def update_mermaid_pie_chart(
 
     # Put data into chart_data
     for result in db_data['results']:
+        data = 0
         if result['properties'][db_property_value]['type'] == 'number':
-            chart_data[result['properties'][db_property_category]['select']['name']] += abs(result['properties'][db_property_value]['number'])
+            data = result['properties'][db_property_value]['number']
         elif result['properties'][db_property_value]['type'] == 'formula':
-            chart_data[result['properties'][db_property_category]['select']['name']] += abs(result['properties'][db_property_value]['formula']['number'])
+            data = result['properties'][db_property_value]['formula']['number']
         else:
             raise Exception(f'Property {db_property_value} must be a number or formula property. Property type is {result["properties"][db_property_value]["type"]}')
+        # Ignore income (positive values)
+        if (data > 0): continue
+        chart_data[result['properties'][db_property_category]['select']['name']] -= data
 
     # Round values to 2 decimal places
     for category in chart_data:
