@@ -15,8 +15,9 @@ def main():
 
     # Update the chart for this month
     chart_title_this_month = 'This Month Expenses'
+    next_month = datetime.date.today().month % 12 + 1
     first_date_this_month = datetime.date.today().replace(day=1)
-    last_date_this_month = datetime.date.today().replace(day=1, month=datetime.date.today().month+1) - datetime.timedelta(days=1)
+    last_date_this_month = datetime.date.today().replace(day=1, month=next_month) - datetime.timedelta(days=1)
     filter_this_month = {
         'and': [
             {
