@@ -10,8 +10,12 @@ services:
       - NOTION_EXPENSE_CHART_PAGE_ID=notion_page_id # Replace with your Notion page id
       - NOTION_EXPENSE_CHART_DATA_DB_ID=notion_database_id # Replace with your Notion database id
       - NOTION_EXPENSE_CHART_DB_PROPERTY_CATEGORY=Category # Replace with your Notion database property name
+      - NOTION_EXPENSE_CHART_DB_CATEGORIES_TO_IGNORE=IgnoreCategory1:IgnoreCategory2 # Replace with your Notion database categories to ignore, separated by commas
       - NOTION_EXPENSE_CHART_DB_PROPERTY_VALUE=Value # Replace with your Notion database property name
       - NOTION_EXPENSE_CHART_DB_PROPERTY_DATE=Date # Replace with your Notion database property name
+      - NOTION_BALANCE_CHART_DATA_DB_ID=notion_database_id # Replace with your Notion database id
+      - NOTION_BALANCE_CHART_DB_PROPERTY_VALUE=Balance # Replace with your Notion database property name
+      - NOTION_BALANCE_CHART_DB_PROPERTY_DATE=Date # Replace with
     volumes:
       - ../src:/app
     command: python3 /app/main.py

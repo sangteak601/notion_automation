@@ -1,7 +1,7 @@
 from notion_client import Client
 
 
-def get_nested_children(notion_client : Client, block_id : str):
+def get_nested_children(notion_client : Client, block_id : str) -> list:
     """
     Get all nested children of a block.
 
@@ -28,6 +28,41 @@ def get_nested_children(notion_client : Client, block_id : str):
 
     return all_children
 
+def filter_by_type(items : list, type_name : str) -> list:
+    """
+    Filter a list of Notion blocks by type.
+
+    Args:
+        items (list): List of Notion blocks
+        type_name (str): Type name to filter by
+
+    Returns:
+        list: List of Notion blocks of the specified type
+    """
+    filtered_items = []
+    for item in items:
+        if item['type'] == type_name:
+            filtered_items.append(item)
+    return filtered_items
+
+def find_code_block_by_title(notion_client : Client, block_id : str, title : str) -> dict:
+    """
+    Find a code block by title.
+
+    Args:
+        notion_client (Client): Notion client object
+        block_id (str): Block ID to search in
+        title (str): Title to search for
+    Returns:
+        dict: Code block with the specified title, or None if not found
+    """
+    code_blocks = filter_by_type(get_nested_children(notion_client, block_id), 'code')
+    for code_block in code_blocks:
+        if title in code_block['code']['rich_text'][0]['text']['content']:
+            return code_block
+
+    return None
+
 def update_mermaid_pie_chart(
     notion_client : Client,
     page_id : str,
@@ -35,6 +70,7 @@ def update_mermaid_pie_chart(
     db_id : str,
     db_filter : dict,
     db_property_category : str,
+    db_categories_to_ignore : list,
     db_property_value : str):
     """
     Update a Mermaid chart with data from a Notion database.
@@ -46,12 +82,13 @@ def update_mermaid_pie_chart(
         db_id (str): Database ID to get data from
         db_filter (dict): Database filter to apply
         db_property_category (str): Database property name to use for categories in the chart. Must be a select property.
+        db_categories_to_ignore (list): List of categories to ignore in the chart.
         db_property_value (str): Database property name to use for values in the chart. Must be a number or a formula property.
     """
     # Get database info
-    db_info = notion_client.databases.retrieve(
+    db_info = notion_client.data_sources.retrieve(
         **{
-            'database_id': db_id,
+            'data_source_id': db_id,
         }
     )
 
@@ -62,9 +99,9 @@ def update_mermaid_pie_chart(
         chart_data[category['name']] = 0
 
     # Get data from database
-    db_data = notion_client.databases.query(
+    db_data = notion_client.data_sources.query(
         **{
-            'database_id': db_id,
+            'data_source_id': db_id,
             'filter': db_filter
         }
     )
@@ -78,27 +115,22 @@ def update_mermaid_pie_chart(
             data = result['properties'][db_property_value]['formula']['number']
         else:
             raise Exception(f'Property {db_property_value} must be a number or formula property. Property type is {result["properties"][db_property_value]["type"]}')
-        # Ignore income (positive values)
-        if (data > 0): continue
         chart_data[result['properties'][db_property_category]['select']['name']] -= data
+
+    # Remove categories to ignore
+    for category in db_categories_to_ignore:
+        if category in chart_data:
+            del chart_data[category]
 
     # Round values to 2 decimal places
     for category in chart_data:
         chart_data[category] = round(chart_data[category], 2)
 
-    # Get children of the page
-    page_children = get_nested_children(notion_client, page_id)
-
-    # Get the block ID of the chart using the title
-    chart_block_id = None
-    for result in page_children:
-        if result['type'] == 'code':
-            if chart_title in result['code']['rich_text'][0]['text']['content']:
-                chart_block_id = result['id']
-                break
+    # Get the code block by title
+    chart_block = find_code_block_by_title(notion_client, page_id, chart_title)
 
     # Check if chart was found
-    if chart_block_id is None:
+    if chart_block is None:
         raise Exception(f'Chart with title {chart_title} not found on page')
 
     # Update the chart
@@ -110,7 +142,91 @@ def update_mermaid_pie_chart(
     # Update the chart block
     notion_client.blocks.update(
         **{
-            'block_id': chart_block_id,
+            'block_id': chart_block['id'],
+            'code': {
+                'rich_text': [
+                    {
+                        'text': {
+                            'content': mermaid_script,
+                        },
+                    },
+                ]
+            }
+        }
+    )
+
+def update_mermaid_line_chart_accumulation(
+    notion_client : Client,
+    page_id : str,
+    chart_title : str,
+    db_id : str,
+    db_filter : dict,
+    db_property_index : str,
+    db_property_value : str):
+    """
+    Update a Mermaid line chart with accumulated data from a Notion database.
+    Args:
+        notion_client (Client): Notion client object
+        page_id (str): Page ID where the chart is located
+        chart_title (str): Title of the chart
+        db_id (str): Database ID to get data from
+        db_filter (dict): Database filter to apply
+        db_property_index (str): Database property name to use for the index in the chart. Must be a date property.
+        db_property_value (str): Database property name to use for values in the chart. Must be a number or a formula property.
+    """
+    # Get data from database
+    db_data = notion_client.data_sources.query(
+        **{
+            'data_source_id': db_id,
+            'filter': db_filter
+        }
+    )
+
+    # Create dictionary to store chart data
+    chart_data = {}
+    for result in db_data['results']:
+        data = 0
+        if result['properties'][db_property_value]['type'] == 'number':
+            data = result['properties'][db_property_value]['number']
+        elif result['properties'][db_property_value]['type'] == 'formula':
+            data = result['properties'][db_property_value]['formula']['number']
+        else:
+            raise Exception(f'Property {db_property_value} must be a number or formula property. Property type is {result["properties"][db_property_value]["type"]}')
+        index = result['properties'][db_property_index]['date']['start']
+        if index not in chart_data:
+            chart_data[index] = 0
+        chart_data[index] += data
+
+    # Sort chart data by index
+    chart_data = dict(sorted(chart_data.items()))
+
+    # Accumulate chart data
+    accumulated_value = 0
+    for index in chart_data:
+        accumulated_value += chart_data[index]
+        chart_data[index] = round(accumulated_value, 2)
+
+    # Get the code block by title
+    chart_block = find_code_block_by_title(notion_client, page_id, chart_title)
+
+    # Check if chart was found
+    if chart_block is None:
+        raise Exception(f'Chart with title {chart_title} not found on page')
+
+    # Update the chart
+    tab = ' ' * 4
+    mermaid_script = f"---\nconfig:\n{tab}xyChart:\n{tab}{tab}width: 1200\n{tab}{tab}height: 600\n{tab}themeVariables:\n{tab}{tab}xyChart:\n{tab}{tab}{tab}plotColorPalette: '#0000FF'\n---\n"
+    mermaid_script += f'xychart title "{chart_title}"\n'
+    mermaid_script += f'{tab}x-axis ['
+    mermaid_script += ', '.join([f'"{index.split("-")[0][2:] + "-" + index.split("-")[1]}"' for index in chart_data.keys()]) + ']\n'
+    mermaid_script += f'{tab}y-axis "Balance in £"\n'
+    mermaid_script += f'{tab}line ['
+    mermaid_script += ', '.join([str(value) for value in chart_data.values()]) + ']\n'
+
+    # Update the chart block
+    notion_client.blocks.update(
+        **{
+            'block_id': chart_block['id'],
             'code': {
                 'rich_text': [
                     {
