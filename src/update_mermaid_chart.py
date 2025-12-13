@@ -162,7 +162,8 @@ def update_mermaid_line_chart_accumulation(
     db_id : str,
     db_filter : dict,
     db_property_index : str,
-    db_property_value : str):
+    db_property_value : str,
+    max_points : int = 24):
     """
     Update a Mermaid line chart with accumulated data from a Notion database.
     Args:
@@ -173,6 +174,7 @@ def update_mermaid_line_chart_accumulation(
         db_filter (dict): Database filter to apply
         db_property_index (str): Database property name to use for the index in the chart. Must be a date property.
         db_property_value (str): Database property name to use for values in the chart. Must be a number or a formula property.
+        max_points (int): Maximum number of points to display on the chart. Defaults to 24.
     """
     # Get data from database
     db_data = notion_client.data_sources.query(
@@ -205,6 +207,10 @@ def update_mermaid_line_chart_accumulation(
     for index in chart_data:
         accumulated_value += chart_data[index]
         chart_data[index] = round(accumulated_value, 2)
+
+    # Limit number of points to max_points
+    if len(chart_data) > max_points:
+        chart_data = dict(list(chart_data.items())[-max_points:])
 
     # Get the code block by title
     chart_block = find_code_block_by_title(notion_client, page_id, chart_title)

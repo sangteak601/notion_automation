@@ -88,22 +88,12 @@ def main():
 
     # Update the line chart for last 24 months
     chart_title_line_chart = 'Balance Over Time'
-    first_date_24_months_ago = datetime.date.today().replace(day=1, year=datetime.date.today().year - 2)
     filter_24_month = {
-        'and': [
-            {
-                'property': balance_date_property,
-                'date': {
-                    'on_or_after': first_date_24_months_ago.isoformat(),
-                },
-            },
-            {
-                'property': balance_date_property,
-                'date': {
-                    'on_or_before': last_date_this_month.isoformat(),
-                }
-            },
-        ]
+        'property': balance_date_property,
+        'date': {
+            'on_or_before': last_date_this_month.isoformat(),
+        }
+
     }
 
     update_mermaid_line_chart_accumulation(
